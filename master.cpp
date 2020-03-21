@@ -58,23 +58,23 @@ double findPath(int x1, int y1, int z1, int x2, int y2, int z2, int *vert, int c
 	while(change<20){
 		icount=icount+1;
 		/*
-			此处还应有进程间更新光晕没有写!!!
+			此处还应有进程间更新光晕没有写!!!!
 
 		*/
-		for (int i = 0; i < mat_0_len; i++)
+		for (int i = halo_size; i < mat_0_len-halo_size; i++)
 		{
-			for (int j = 0; j < mat_1_len; j++)
+			for (int j = halo_size; j < mat_1_len-halo_size; j++)
 			{
-				for (int k = 0; k < mat_2_len/numprcos; k++)
+				for (int k = halo_size; k < mat_2_len/numprcos-halo_size; k++)
 				{
-					local_mat_new[i][j][k] = local_mat_old[i][j][k] * (1 + rat) + (local_mat_old[i - 1][j][k] + local_mat_old[i + 1][j][k] + local_mat_old[i][j - 1][k] + local_mat_old[i][j + 1][k] + local_mat_old[i][j][k - 1] + local_mat_old[i][j][k + 1]) * rat;
+					local_mat_new[i-halo_size][j-halo_size][k-halo_size] \
+					= local_mat_old[i][j][k] * (1 + rat) + (local_mat_old[i - 1][j][k] + local_mat_old[i + 1][j][k] + local_mat_old[i][j - 1][k] + local_mat_old[i][j + 1][k] + local_mat_old[i][j][k - 1] + local_mat_old[i][j][k + 1]) * rat;
 					local_mat__new=local_mat_new[i][j][k] * local_mat_old[i][j][k];
 					if (local_mat_new[i][j][k] > 1 && local_H[i][j][k] == 0) local_H[i][j][k] = icount;
 				}
 			}
 		}
 		MPI_Barrier(MPI_COMM_WORLD);
-		MPI_Gather(local_mat_old_new,mat_0_len*mat_1_len*mat_2_len/numprocs,MPI_DOUBLE,mat,mat_0_len*mat_1_len*mat_2_len,MPI_DOUBLE,0,MPI_COMM_WORLD);
 		int local_nowpop=0;
 		for (int i = 0; i < mat_0_len; i++)
 		{
@@ -94,10 +94,13 @@ double findPath(int x1, int y1, int z1, int x2, int y2, int z2, int *vert, int c
 		}
 	}
 
+	int id=z2/block_size;
+	if(rank==id){
+		if(local_mat_old[x1][y2][z2%block_size+halo_size] == 0)
+			printf("cant spread to the end point \n");
+	}
+
 	if(rank==0){
-		if (mat[x2][y2][z2] == 0) printf("cant spread to the end point \n");
-		else
-		{
 			double ***xgrad = NULL;
 			xgrad = (double***)malloc(sizeof(double)*mat_0_len);
 			for (int i = 0; i < mat_0_len; i++)
@@ -528,15 +531,14 @@ int main(int argc,char **argv)
 	}
 
 	double dist = findPath(10, 5, 5, 15, 80, 5, vert, c);
-	
-	printf("dist = %lf", dist);
-	end=MPI_Wtime();
-	printf("\ttime:%lf\n");
+	if(myid==0){
+		printf("dist = %lf", dist);
+		end=MPI_Wtime();
+		printf("\ttime:%lf\n");
+	}
 
 	athread_halt();
 	MPI_Finalize();
-	//system("pause");
-	
 	return 0;
 }
 
