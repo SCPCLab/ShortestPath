@@ -3,28 +3,554 @@
 #include <string.h>
 #include <math.h>
 #include <time.h>
-#include<mpi.h>
+#include <mpi.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 
 extern "C" {
-#include <athread.h>
-
+	#include <athread.h>
     void slave_setHall(void);
 }
 
 #define MAX_LEN 30
 #define MAX_VERT 1000
 #define MAX_PARA 1000
-#define MAT_3D_0_LEN 100
-#define MAT_3D_1_LEN 100
-#define MAT_3D_2_LEN 100
+#define mat_0_len 100
+#define mat_1_len 100
+#define mat_2_len 100
+#define halo_size 1
 
-double min(double x1, double x2) {
+double local_mat_old_old[mat_0_len+2*halo_size][mat_1_len+2*halo_size][block_size+2*halo_size]; 
+double local_mat_old_new[mat_0_len][mat_1_len][block_size];
+double local_H[mat_0_len][mat_1_len][mat_2_len/numprocs];
+double local_xgrad[mat_0_len][mat_1_len][mat_2_len/numprocs];
+double local_ygrad[mat_0_len][mat_1_len][mat_2_len/numprocs];
+double local_zgrad[mat_0_len][mat_1_len][mat_2_len/numprocs];
+int block_size=mat_2_len/numprocs; //block_size without halo
+int vert[MAX_VERT];
+int para[MAX_PARA];
+int vert_len ;
+int para_len ;
+
+int set_obstacle(int x,int y,int z,int target){ //the input is mat index,transform to local_mat index width halo and change it
+	int id=z/block_size;
+	if(rank==id)
+		local_mat_old[x][y][z%block_size+halo_size] = target;
+}
+double min(double x1, double x2) {  
 	if (x1 > x2) return x2;
 	else return x1;
 }
+
+double getGrad(double ***GV, double x, double y, double z)
+bool crossObstacle(double x1, double y1, double z1, double x2, double y2, double z2, int ***local_mat_old, int c)
+double findPath(int x1, int y1, int z1, int x2, int y2, int z2, int *vert, int cons) {
+	if(rank==0){
+		int change = 0;
+		int lastpop, nowpop = 0;
+        double dist = 0; 
+	}
+	int icount = 0;          
+	double rat = 0.1;
+	double speed = 0.5;    
+	set_obstacle(x1,y1,z1,1);
+	while(change<20){
+		icount=icount+1;
+		/*
+			æ­¤å¤„è¿˜åº”æœ‰è¿›ç¨‹é—´æ›´æ–°å…‰æ™•æ²¡æœ‰å†™!!!
+
+		*/
+		for (int i = 0; i < mat_0_len; i++)
+		{
+			for (int j = 0; j < mat_1_len; j++)
+			{
+				for (int k = 0; k < mat_2_len/numprcos; k++)
+				{
+					local_mat_new[i][j][k] = local_mat_old[i][j][k] * (1 + rat) + (local_mat_old[i - 1][j][k] + local_mat_old[i + 1][j][k] + local_mat_old[i][j - 1][k] + local_mat_old[i][j + 1][k] + local_mat_old[i][j][k - 1] + local_mat_old[i][j][k + 1]) * rat;
+					local_mat__new=local_mat_new[i][j][k] * local_mat_old[i][j][k];
+					if (local_mat_new[i][j][k] > 1 && local_H[i][j][k] == 0) local_H[i][j][k] = icount;
+				}
+			}
+		}
+		MPI_Barrier(MPI_COMM_WORLD);
+		MPI_Gather(local_mat_old_new,mat_0_len*mat_1_len*mat_2_len/numprocs,MPI_DOUBLE,mat,mat_0_len*mat_1_len*mat_2_len,MPI_DOUBLE,0,MPI_COMM_WORLD);
+		int local_nowpop=0;
+		for (int i = 0; i < mat_0_len; i++)
+		{
+			for (int j = 0; j < mat_1_len; j++)
+			{
+				for (int k = 0; k < mat_2_len/numprocs; k++)
+				{
+					if (local_mat[i][j][k] > 1) local_nowpop = local_nowpop + 1;
+				}
+			}
+		}            
+		MPI_Barrier(MPI_COMM_WORLD);
+		MPI_Reduce(&local_nowpop,nowpop,1,int,MPI_SUM,0,MPI_COMM_WORLD);
+		if(rank==0){
+			if (nowpop - lastpop < 1) change = change + 1;
+			last_pop=now_pop;
+		}
+	}
+
+	if(rank==0){
+		if (mat[x2][y2][z2] == 0) printf("cant spread to the end point \n");
+		else
+		{
+			double ***xgrad = NULL;
+			xgrad = (double***)malloc(sizeof(double)*mat_0_len);
+			for (int i = 0; i < mat_0_len; i++)
+			{
+				xgrad[i] = (double**)malloc(sizeof(double)*mat_1_len);
+				for (int k = 0; k < mat_1_len; k++)
+				{
+					xgrad[i][k] = (double*)malloc(sizeof(double)*mat_2_len);
+				}
+			}
+			double ***ygrad = NULL;
+			ygrad = (double***)malloc(sizeof(double)*mat_0_len);
+			for (int i = 0; i < mat_0_len; i++)
+			{
+				ygrad[i] = (double**)malloc(sizeof(double)*mat_1_len);
+				for (int k = 0; k < mat_1_len; k++)
+				{
+					ygrad[i][k] = (double*)malloc(sizeof(double)*mat_2_len);
+				}
+			}
+			double ***zgrad = NULL;
+			zgrad = (double***)malloc(sizeof(double)*mat_0_len);
+			for (int i = 0; i < mat_0_len; i++)
+			{
+				zgrad[i] = (double**)malloc(sizeof(double)*mat_1_len);
+				for (int k = 0; k < mat_1_len; k++)
+				{
+					zgrad[i][k] = (double*)malloc(sizeof(double)*mat_2_len);
+				}
+			}
+		}
+	}
+	MPI_Scatter(&xgrad[0][0][0],mat_2_len*mat_1_len*mat_0_len,MPI_DOUBLE,&xgrad[0][0][0],mat_0_len*mat_1_len*block_size,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	MPI_Scatter(&ygrad[0][0][0],mat_2_len*mat_1_len*mat_0_len,MPI_DOUBLE,&ygrad[0][0][0],mat_0_len*mat_1_len*block_size,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	MPI_Scatter(&zgrad[0][0][0],mat_2_len*mat_1_len*mat_0_len,MPI_DOUBLE,&zgrad[0][0][0],mat_0_len*mat_1_len*block_size,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	for (int i = 0; i < mat_0_len; i++)
+	{
+		for (int j = 0; j < mat_1_len; j++)
+		{
+			for (int k = 0; k < block_size; k++)
+			{
+				if (i == 0)
+					local_local_x_grad[i][j][k] = -(local_local_H[i + 1][j][k] - local_local_H[i][j][k]);
+				else if (i == mat_0_len - 1) 
+					local_x_grad[i][j][k] = -(local_H[i][j][k] - local_H[i - 1][j][k]);
+				else
+					local_x_grad[i][j][k] = -((local_H[i + 1][j][k] - local_H[i - 1][j][k]) / 2);       
+				if (j == 0) 
+					local_y_grad[i][j][k] = -(local_H[i][j + 1][k] - local_H[i][j][k]);
+				else if (j == mat_1_len - 1) 
+					local_y_grad[i][j][k] = -(local_H[i][j][k] - local_H[i][j - 1][k]);
+				else 
+					local_y_grad[i][j][k] = -((local_H[i][j + 1][k] - local_H[i][j - 1][k]) / 2);     
+				if (k == 0) 
+					local_z_grad[i][j][k] = -(local_H[i][j][k + 1] - local_H[i][j][k]);
+				else if (k == mat_1_len - 1) 
+					local_z_grad[i][j][k] = -(local_H[i][j][k] - local_H[i][j][k - 1]);
+				else 
+					local_z_grad[i][j][k] = -((local_H[i][j][k + 1] - local_H[i][j][k - 1]) / 2);    
+			}
+		}
+	}
+	MPI_Barrier(MPI_COMM_WORLD);
+	MPI_Gather(&local_xgrad[0][0][0],mat_0_len*mat_1_len*block_size,MPI_DOUBLE,&xgrad[0][0][0],mat_0_len*mat_1_len*mat_2_len,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	MPI_Gather(&local_ygrad[0][0][0],mat_0_len*mat_1_len*block_size,MPI_DOUBLE,&ygrad[0][0][0],mat_0_len*mat_1_len*mat_2_len,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	MPI_Gather(&local_ygrad[0][0][0],mat_0_len*mat_1_len*block_size,MPI_DOUBLE,&ygrad[0][0][0],mat_0_len*mat_1_len*mat_2_len,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	if(rank==0){
+		double *r = (double*)malloc(sizeof(double) * mat_0_len * mat_1_len * mat_2_len);
+		double *c = (double*)malloc(sizeof(double) * mat_0_len * mat_1_len * mat_2_len);
+		double *h = (double*)malloc(sizeof(double) * mat_0_len * mat_1_len * mat_2_len);
+		double rmax = mat_0_len;
+		double cmax = mat_1_len;
+		double hmax = mat_2_len;
+
+		r[0] = x2;
+		c[0] = y2;
+		h[0] = z2;
+		int iter = 0;
+		bool continflag = true;
+		while (continflag)
+		{
+			double dr, dc, dh, dv;
+			dr = getGrad(xgrad, r[iter], c[iter], h[iter]);
+			dc = getGrad(ygrad, r[iter], c[iter], h[iter]);
+			dh = getGrad(zgrad, r[iter], c[iter], h[iter]);
+			dv = sqrt(dr * dr + dc * dc + dh * dh);
+			dc = speed * dc / dv;
+			dh = speed * dh / dv;
+			r[iter + 1] = r[iter] + dr;
+			c[iter + 1] = c[iter] + dc;
+			h[iter + 1] = h[iter] + dh;
+			if (r[iter + 1] < 0)
+			{
+				r[iter + 1] = 0;
+			}
+			if (c[iter + 1] < 0)
+			{
+				c[iter + 1] = 0;
+			}
+			if (h[iter + 1] < 0)
+			{
+				h[iter + 1] = 0;
+			}
+			if (r[iter + 1] > rmax - 1)
+			{
+				r[iter + 1] = rmax - 1;
+			}
+			if (c[iter + 1] > cmax - 1)
+			{
+				c[iter + 1] = cmax - 1;
+			}
+			if (h[iter + 1] > hmax - 1)
+			{
+				h[iter + 1] = hmax - 1;
+			}                               
+			if (sqrt(pow((r[iter + 1] - x1), 2) + pow((c[iter + 1] - y1), 2) + pow((h[iter + 1] - z1), 2)) < 1)
+			{
+				r[iter + 1] = x1;
+				c[iter + 1] = y1;
+				h[iter + 1] = z1;
+				continflag = false;
+			}            
+			iter = iter + 1;
+		}              
+
+		int infr_Length = 20;
+		double infr[20] = { 0 };
+		double infc[20] = { 0 };
+		double infh[20] = { 0 };       
+		infr[0] = r[iter];
+		infc[0] = c[iter];
+		infh[0] = h[iter];
+		int g = 0;                                             
+		bool con = true;
+		bool ju = true;
+		while (con)
+		{
+			ju = true;
+			for (int i = 0; i <= iter; i++)
+			{
+				if (crossObstacle(r[i], c[i], h[i], r[iter], c[iter], h[iter], local_mat_old, cons) && ju)
+				{
+					ju = false;
+					++g;
+					infr[g] = r[i];
+					infc[g] = c[i];
+					infh[g] = h[i];
+					iter = i;
+					if (i == 0)
+						con = false;
+				}
+
+			}
+		}
+		double s[MAX_VERT] = { 0 };           
+		for (int i = 1; i < infr_Length - 1; i++)
+		{
+			if (infr[i + 1] != 0 || infc[i + 1] != 0 || infh[i + 1] != 0)
+			{
+				double testx, testy, testz, minest;
+				if (infh[i + 1] > infh[i - 1])
+					testz = fabs(sqrt(pow((infr[i] - infr[i - 1]), 2) + pow((infc[i] - infc[i - 1]), 2)) / (sqrt(pow((infr[i] - infr[i - 1]), 2) + pow((infc[i] - infc[i - 1]), 2)) + sqrt(pow((infr[i + 1] - infr[i]), 2) + pow((infc[i + 1] - infc[i]), 2))) * fabs(infh[i + 1] - infh[i - 1]) + infh[i - 1] - infh[i]);
+				else
+					testz = fabs(infh[i - 1] - sqrt(pow((infr[i] - infr[i - 1]), 2) + pow((infc[i] - infc[i - 1]), 2)) / (sqrt(pow((infr[i] - infr[i - 1]), 2) + pow((infc[i] - infc[i - 1]), 2)) + sqrt(pow((infr[i + 1] - infr[i]), 2) + pow((infc[i + 1] - infc[i]), 2))) * fabs(infh[i + 1] - infh[i - 1]) - infh[i]);
+
+				testx = fabs((infc[i] - infc[i + 1]) / (infc[i - 1] - infc[i + 1]) * (infr[i - 1] - infr[i + 1]) + infr[i + 1] - infr[i]);
+				testy = fabs((infr[i] - infr[i + 1]) / (infr[i - 1] - infr[i + 1]) * (infc[i - 1] - infc[i + 1]) + infc[i + 1] - infc[i]);
+				minest = min(min(testx, testy), testz);
+				if (testz == minest)
+				{
+					for (int j = 0; j < MAX_VERT - 5; j++)
+					{
+						if (j % 6 == 0)
+						{
+							s[j] = sqrt(pow((infr[i] - vert[j]), 2) + pow((infc[i] - vert[j + 1]), 2));
+							s[j + 2] = sqrt(pow((infr[i] - vert[j + 2]), 2) + pow((infc[i] - vert[j + 3]), 2));
+						}
+					}
+					double mins = s[0];
+					int index = 0;
+					for (int k = 0; k < MAX_VERT; k++)
+					{
+						if (s[k] != 0)
+						{
+							if (s[k] == min(s[k], mins))
+							{
+								mins = s[k];
+								index = k;
+							}
+						}
+					}
+					infr[i] = vert[index];
+					infc[i] = vert[index + 1];
+				}
+				else
+				{
+
+				}
+			}
+		}                       
+		double dist1[20] = { 0 };
+		int dist1_Length = 20;
+		for (int i = 0; i < infr_Length - 1; i++)
+		{
+			if (infr[i + 1] != 0 || infc[i + 1] != 0 || infh[i + 1] != 0)
+				dist1[i] = sqrt(pow((infr[i] - infr[i + 1]), 2) + pow((infc[i] - infc[i + 1]), 2) + pow((infh[i] - infh[i + 1]), 2));
+		}
+		for (int i = 0; i < dist1_Length; i++)
+			printf("dist1[%d]=%f\n", i, dist1[i]);
+		for (int i = 0; i < infr_Length; i++)
+			dist = dist + dist1[i];
+		return dist;
+	}
+}
+
+int main(int argc,char **argv)
+{
+	int rank,numprocs;
+	MPI_Init(&argc,&argv);
+	MPI_Comm_rank(MPI_COMM_WORLD,&rank);
+	MPI_Comm_size(MPI_COMM_WORLD,&numprocs);
+	if(rank==0){
+		char str[MAX_LEN] = { 0 };
+		FILE* sr;
+
+		sr = fopen("vert.txt", "r");
+		if (sr == NULL) {
+			puts("can not open file!");
+			return 0;
+		}
+		fgets(str, MAX_LEN, sr);
+		while (!feof(sr)) {
+			fgets(str, MAX_LEN, sr);
+			char * token = strtok(str, " ");
+			while (token != NULL) {
+				vert[vert_len++] = atoi(token);
+				token = strtok(NULL, " ");
+			}
+		}
+		fclose(sr);
+
+		sr = fopen("para.txt", "r");
+		if (sr == NULL) {
+			puts("can not open file!");
+			return 0;
+		}
+		fgets(str, MAX_LEN, sr);
+		while (!feof(sr)) {
+			fgets(str, MAX_LEN, sr);
+			char * token = strtok(str, " ");
+			while (token != NULL) {
+				para[para_len++] = atoi(token);
+				token = strtok(NULL, " ");
+			}
+		}
+		fclose(sr);
+
+
+		double end,start;
+		start=MPI_Wtime();         
+	
+		athread_init();
+		athread_set_num_threads(nums);
+		/*
+		__real_athread_spawn((void *)func,0);	
+		*/
+		MPI_Bcast(verta,vert_len,MPI_DOUBLE,0,MPI_COMM_WORLD);
+		MPI_Bcast(&vert_len,1,MPI_INT,0,MPI_COMM_WORLD);
+		MPI_Bcast(para,vert_len,MPI_DOUBLE,0,MPI_COMM_WORLD);
+		MPI_Bcast(&para_len,1,MPI_INT,0,MPI_COMM_WORLD);
+	}
+	for (int i = 0; i < vert_len - 5; i++)
+	{
+		if (i % 6 == 0)
+		{
+			int h;
+			h = vert[i + 5] - vert[i + 4] + 1;
+			if (vert[i + 1] == vert[i + 3])
+			{
+				if (vert[i] < vert[i + 2])
+				{
+					for (int j = vert[i + 4]; j < h; j++)
+					{
+						for (int k = vert[i]; k <= vert[i + 2]; k++)
+						{
+							set_obstacle(k,vert[i+1],j,1);
+						}
+					}
+				}
+				else
+				{
+					for (int j = vert[i + 4]; j < h; j++)
+					{
+						for (int k = vert[i + 2]; k <= vert[i]; k++)
+						{
+						    set_obstacle(k,vert[i+1],j,1);
+						}
+					}
+				}
+			}
+			else if (vert[i] == vert[i + 2])
+			{
+				if (vert[i + 1] < vert[i + 3])
+				{
+					for (int j = vert[i + 4]; j < h; j++)
+					{
+						for (int k = vert[i + 1]; k <= vert[i + 3]; k++)
+						{
+							set_obstacle(vert[i],k,j,1);
+						}
+					}
+				}
+				else
+				{
+					for (int j = vert[i + 4]; j < h; j++)
+					{
+						for (int k = vert[i + 3]; k <= vert[i + 1]; k++)
+						{
+							set_obstacle(vert[i],k,j,1);
+						}
+					}
+				}
+			}
+			else
+			{
+				double a = (double)(vert[i + 1] - vert[i + 3]) / (vert[i] - vert[i + 2]);
+				double b = (double)(vert[i + 1] - a * vert[i]);
+				if (fabs(vert[i + 1] - vert[i + 3]) <= fabs(vert[i] - vert[i + 2]))
+				{
+					if (vert[i] < vert[i + 2])
+					{
+						for (int j = vert[i + 4]; j < h; j++)
+						{
+							for (int k = vert[i]; k <= vert[i + 2]; k++)
+							{
+								set_obstacle(k,(int)(a * k + b + 0.5),j,1)
+								set_obstacle(k+1,(int)(a*k+b+0.5),j,1);
+							}
+						}
+					}
+					else
+					{
+						for (int j = vert[i + 4]; j < h; j++)
+						{
+							for (int k = vert[i + 2]; k <= vert[i]; k++)
+							{
+								set_obstacle(k,(int)(a * k + b + 0.5),j,1)
+								set_obstacle(k+1,(int)(a*k+b+0.5),j,1);
+							}
+						}
+					}
+				}
+				else
+				{
+					if (vert[i + 1] < vert[i + 3])
+					{
+						for (int j = vert[i + 4]; j < h; j++)
+						{
+							for (int k = vert[i + 1]; k <= vert[i + 3]; k++)
+							{
+								set_obstacle((int)((k - b) / a + 0.5),k,j,1);
+								set_obstacle((int)((k - b) / a + 0.5),k+1,j,1);
+							}
+						}
+					}
+					else
+					{
+						for (int j = vert[i + 4]; j < h; j++)
+						{
+							for (int k = vert[i + 3]; k <= vert[i + 1]; k++)
+							{
+								set_obstacle((int)((k - b) / a + 0.5),k,j,1);
+								set_obstacle((int)((k - b) / a + 0.5),k+1,j,1);
+							}
+						}
+					}
+				}
+
+			}
+		}
+	}
+
+	for (int i = 0; i < para_len - 5; i++)
+	{
+		if (para[i] == para[i + 2])
+		{
+			if (para[i + 1] < para[i + 3])
+			{
+				for (int k = para[i] - para[i + 5] / 2; k <= para[i] + para[i + 5] / 2; k++)
+				{
+					for (int j = para[i + 1]; j <= para[i + 3]; j++)
+					{
+						set_obstacle(k,j,para[i + 4],1);
+					}
+				}
+			}
+			else
+			{
+				for (int k = para[i] - para[i + 5] / 2; k <= para[i] + para[i + 5] / 2; k++)
+				{
+					for (int j = para[i + 3]; j <= para[i + 1]; j++)
+					{
+						set_obstacle(k,j,para[i + 4],1);
+					}
+				}
+
+			}
+
+		}
+	}
+	for (int i = 0; i < mat_0_len; i++)
+	{
+		for (int j = 0; j < mat_1_len; j++)
+		{
+			for (int k = 0; k < mat_2_len; k++)
+			{
+				if (local_mat_old[i][j][k] == 1)
+				{
+					set_obstacle(i,j,k,0);
+					c++;
+				}
+				else
+				{
+					set_obstacle(i,j,k,1);
+				}
+			}
+		}
+	}
+
+	double dist = findPath(10, 5, 5, 15, 80, 5, vert, c);
+	
+	printf("dist = %lf", dist);
+	end=MPI_Wtime();
+	printf("\ttime:%lf\n");
+
+	athread_halt();
+	MPI_Finalize();
+	//system("pause");
+	
+	return 0;
+}
+
+
+
+
+
+
+
+
+
+
+
+
 
 double getGrad(double ***GV, double x, double y, double z)
 {
@@ -85,9 +611,9 @@ double getGrad(double ***GV, double x, double y, double z)
 	}
 
 	return value;
-}//ÏßÐÔ²åÖµ·½·¨·µ»ØÌÝ¶ÈÖµ
+}
 
-bool crossObstacle(double x1, double y1, double z1, double x2, double y2, double z2, int ***mat_3d, int c)
+bool crossObstacle(double x1, double y1, double z1, double x2, double y2, double z2, int ***local_mat_old, int c)
 {
 
 	if (x1 < x2)
@@ -96,8 +622,8 @@ bool crossObstacle(double x1, double y1, double z1, double x2, double y2, double
 		{
 			int y = (int)round((x - x1) / (x2 - x1) * (y2 - y1) + y1);
 			int z = (int)round((x - x1) / (x2 - x1) * (z2 - z1) + z1);
-			if (y > 0 && y < MAT_3D_1_LEN && z > 0 && z < MAT_3D_2_LEN&&mat_3d[x][y][z]==0) return false;
-		}//¿Õ¼äÖÐÖ±Ïß·½³Ì              
+			if (y > 0 && y < mat_1_len && z > 0 && z < mat_2_len&&local_mat_old[x][y][z]==0) return false;
+		}             
 	}
 	else if (x1 == x2);
 	else
@@ -106,8 +632,8 @@ bool crossObstacle(double x1, double y1, double z1, double x2, double y2, double
 		{
 			int y = (int)round((x - x1) / (x2 - x1) * (y2 - y1) + y1);
 			int z = (int)round((x - x1) / (x2 - x1) * (z2 - z1) + z1);
-			if (y > 0 && y < MAT_3D_1_LEN && z > 0 && z < MAT_3D_2_LEN&&mat_3d[x][y][z]==0) return false;
-		}//¿Õ¼äÖÐÖ±Ïß·½³Ì          
+			if (y > 0 && y < mat_1_len && z > 0 && z < mat_2_len&&local_mat_old[x][y][z]==0) return false;
+		}               
 	}
 	if (y1 < y2)
 	{
@@ -115,8 +641,8 @@ bool crossObstacle(double x1, double y1, double z1, double x2, double y2, double
 		{
 			int x = (int)round((y - y1) / (y2 - y1) * (x2 - x1) + x1);
 			int z = (int)round((y - y1) / (y2 - y1) * (z2 - z1) + z1);
-			if (y > 0 && y < MAT_3D_1_LEN && z > 0 && z < MAT_3D_2_LEN&&mat_3d[x][y][z]==0) return false;
-		}//¿Õ¼äÖÐÖ±Ïß·½³Ì              
+			if (y > 0 && y < mat_1_len && z > 0 && z < mat_2_len&&local_mat_old[x][y][z]==0) return false;
+		}                  
 	}
 	else if (y1 == y2);
 	else
@@ -125,8 +651,8 @@ bool crossObstacle(double x1, double y1, double z1, double x2, double y2, double
 		{
 			int x = (int)round((y - y1) / (y2 - y1) * (x2 - x1) + x1);
 			int z = (int)round((y - y1) / (y2 - y1) * (z2 - z1) + z1);
-			if (y > 0 && y < MAT_3D_1_LEN && z > 0 && z < MAT_3D_2_LEN&&mat_3d[x][y][z]==0) return false;
-		}//¿Õ¼äÖÐÖ±Ïß·½³Ì            
+			if (y > 0 && y < mat_1_len && z > 0 && z < mat_2_len&&local_mat_old[x][y][z]==0) return false;
+		}                 
 	}
 	if (z1 < z2)
 	{
@@ -134,8 +660,8 @@ bool crossObstacle(double x1, double y1, double z1, double x2, double y2, double
 		{
 			int x = (int)round((z - z1) / (z2 - z1) * (x2 - x1) + x1);
 			int y = (int)round((z - z1) / (z2 - z1) * (y2 - y1) + y1);
-			if (y > 0 && y < MAT_3D_1_LEN && z > 0 && z < MAT_3D_2_LEN&&mat_3d[x][y][z]==0) return false;
-		}//¿Õ¼äÖÐÖ±Ïß·½³Ì              
+			if (y > 0 && y < mat_1_len && z > 0 && z < mat_2_len&&local_mat_old[x][y][z]==0) return false;
+		}                 
 	}
 	else if (z1 == z2);
 	else
@@ -144,661 +670,8 @@ bool crossObstacle(double x1, double y1, double z1, double x2, double y2, double
 		{
 			int x = (int)round((z - z1) / (z2 - z1) * (x2 - x1) + x1);
 			int y = (int)round((z - z1) / (z2 - z1) * (y2 - y1) + y1);
-			if (y > 0 && y < MAT_3D_1_LEN && z > 0 && z < MAT_3D_2_LEN&&mat_3d[x][y][z]==0) return false;
-		}//¿Õ¼äÖÐÖ±Ïß·½³Ì               
+			if (y > 0 && y < mat_1_len && z > 0 && z < mat_2_len&&local_mat_old[x][y][z]==0) return false;
+		}               
 	}
 	return true;
-}//ÅÐ¶ÏÁ½µãÖ®¼äÊÇ·ñ¿É¼û£¬¼´Á½µãÁ¬ÏßÊÇ·ñ´©¹ýÕÏ°­Îï
-
-double findPath(int x1, int y1, int z1, int x2, int y2, int z2, int *vert, int ***mat_3d, int cons) {
-	int change = 0;//ÅÐ¶ÏÊÇ·ñ±éÀúÍêÕû¸ö¾ØÕó
-	int lastpop, nowpop = 0;//¼ÇÂ¼ÒÑ¾­À©É¢µÄÇøÓò
-	int icount = 0;//¼ÇÂ¼À©É¢µÄ´ÎÊý
-	double dist = 0;//Á½µã¼ä×î¶Ì¾àÀë
-
-	double rat = 0.1;//È¨Öµ
-	double speed = 0.5; //ËÑË÷²½³¤
-
-	//double H[MAT_3D_0_LEN][MAT_3D_1_LEN][MAT_3D_2_LEN] = { 0 }; //¼ÇÂ¼Ô­µãÀ©É¢Ë³ÐòµÄ¾ØÕó
-	double ***H = NULL;
-	H = (double***)malloc(sizeof(double**)*MAT_3D_0_LEN);
-	for (int i = 0; i < MAT_3D_0_LEN; i++)
-	{
-		H[i] = (double**)malloc(sizeof(double*)*MAT_3D_1_LEN);
-		for (int k = 0; k < MAT_3D_1_LEN; k++)
-		{
-			H[i][k] = (double*)malloc(sizeof(double)*MAT_3D_2_LEN);
-		}
-	}
-	//double gradmat[MAT_3D_0_LEN][MAT_3D_1_LEN][MAT_3D_2_LEN] = { 0 };
-	double ***gradmat = NULL;
-	gradmat = (double***)malloc(sizeof(double)*MAT_3D_0_LEN);
-	for (int i = 0; i < MAT_3D_0_LEN; i++)
-	{
-		gradmat[i] = (double**)malloc(sizeof(double)*MAT_3D_1_LEN);
-		for (int k = 0; k < MAT_3D_1_LEN; k++)
-		{
-			gradmat[i][k] = (double*)malloc(sizeof(double)*MAT_3D_2_LEN);
-		}
-	}
-
-	
-	//double gradmat_new[MAT_3D_0_LEN][MAT_3D_1_LEN][MAT_3D_2_LEN] = { 0 };
-
-	double ***gradmat_new = NULL;
-	gradmat_new = (double***)malloc(sizeof(double)*MAT_3D_0_LEN);
-	for (int i = 0; i < MAT_3D_0_LEN; i++)
-	{
-		gradmat_new[i] = (double**)malloc(sizeof(double)*MAT_3D_1_LEN);
-		for (int k = 0; k < MAT_3D_1_LEN; k++)
-		{
-			gradmat_new[i][k] = (double*)malloc(sizeof(double)*MAT_3D_2_LEN);
-		}
-	}
-	for (int i = 0; i < MAT_3D_0_LEN; i++) {
-		for (int j = 0; j < MAT_3D_1_LEN; j++) {
-			for (int k = 0; k < MAT_3D_2_LEN; k++) {
-				gradmat[i][j][k] = 0;
-				gradmat_new[i][j][k] = 0;
-				H[i][j][k] = 0;
-			}
-		}
-	}
-
-	gradmat[x1][y1][z1] = 1;//ÆðÊ¼µãÎª1
-	//double xm[MAT_3D_0_LEN - 1][MAT_3D_1_LEN][MAT_3D_2_LEN] = { 0 };
-	//double ym[MAT_3D_0_LEN][MAT_3D_1_LEN - 1][MAT_3D_2_LEN] = { 0 };
-	//double zm[MAT_3D_0_LEN][MAT_3D_1_LEN][MAT_3D_2_LEN - 1] = { 0 };
-
-	//time_t t = time(NULL);
-
-	while (change < 20)
-	{
-		icount = icount + 1;//¼ÇÂ¼À©É¢´ÎÊý
-		//À©É¢¹ý³Ì
-		for (int i = 1; i < MAT_3D_0_LEN - 1; i++)
-		{
-			for (int j = 1; j < MAT_3D_1_LEN - 1; j++)
-			{
-				for (int k = 1; k < MAT_3D_2_LEN - 1; k++)
-				{
-					gradmat_new[i][j][k] = gradmat[i][j][k] * (1 + rat) + (gradmat[i - 1][j][k] + gradmat[i + 1][j][k] + gradmat[i][j - 1][k] + gradmat[i][j + 1][k] + gradmat[i][j][k - 1] + gradmat[i][j][k + 1]) * rat;
-				}
-			}
-		}
-
-		 //~~~~~~~~
-		for (int i = 0; i < MAT_3D_0_LEN; i++)
-		{
-			for (int j = 0; j < MAT_3D_1_LEN; j++)
-			{
-				for (int k = 0; k < MAT_3D_2_LEN; k++)
-				{
-					gradmat[i][j][k] = gradmat_new[i][j][k] * mat_3d[i][j][k];
-					if (gradmat[i][j][k] > 1 && H[i][j][k] == 0)
-					{
-						H[i][j][k] = icount;
-					}
-				}
-			}
-		}//ÕÏ°­Îï´¦½ûÖ¹À©Õ¹  Ä³µã´¦Öµ´óÓÚ1Ê±½«µ±Ç°À©É¢´ÎÊý¸³¸øËû£¬Ã¿¸öµãÖ»ÄÜ±»²Ù×÷Ò»´Î
-
-		lastpop = nowpop;//ÉÏÒ»´ÎÀ©É¢µÄÇøÓò
-		nowpop = 0;
-		for (int i = 0; i < MAT_3D_0_LEN; i++)
-		{
-			for (int j = 0; j < MAT_3D_1_LEN; j++)
-			{
-				for (int k = 0; k < MAT_3D_2_LEN; k++)
-				{
-					if (gradmat[i][j][k] > 1)
-					{
-						nowpop = nowpop + 1;
-					}
-
-				}
-			}
-		}//¼ÇÂ¼ÒÑ±»É¨ÃèµÄÇøÓò
-		if (nowpop - lastpop < 1)
-		{
-			change = change + 1;
-		}
-	}//while*/   
-
-
-	//printf("%d", t - time(NULL));
-
-
-	if (gradmat[x2][y2][z2] == 0)
-	{
-
-		printf("ÎÞ·¨µ½´ïÖÕµã");
-	}//ÅÐ¶ÏÁ½µã¼äÊÇ·ñÓÐÍ¨Â·
-	else
-	{
-		for (int i = 0; i < MAT_3D_0_LEN; i++)
-		{
-			for (int j = 0; j < MAT_3D_1_LEN; j++)
-			{
-				for (int k = 0; k < MAT_3D_2_LEN; k++)
-				{
-					if (H[i][j][k] == 0)
-					{
-						H[i][j][k] = icount;
-					}
-				}
-			}
-		}//Ê¹ÕÏ°­Îï´¦Öµ´óÓÚÖÜÎ§£¬ÌÝ¶ÈÏÂ½µÑ°ÕÒÂ·ÏßÊ±»áÈÆ¹ýÕÏ°­Îï
-		//double xgrad[MAT_3D_0_LEN][MAT_3D_1_LEN][MAT_3D_2_LEN] = { 0 };//Èý¸ö·½ÏòÉÏµÄÌÝ¶È¾ØÕó
-		double ***xgrad = NULL;
-		xgrad = (double***)malloc(sizeof(double)*MAT_3D_0_LEN);
-		for (int i = 0; i < MAT_3D_0_LEN; i++)
-		{
-			xgrad[i] = (double**)malloc(sizeof(double)*MAT_3D_1_LEN);
-			for (int k = 0; k < MAT_3D_1_LEN; k++)
-			{
-				xgrad[i][k] = (double*)malloc(sizeof(double)*MAT_3D_2_LEN);
-			}
-		}
-		//double ygrad[MAT_3D_0_LEN][MAT_3D_1_LEN][MAT_3D_2_LEN] = { 0 };
-		double ***ygrad = NULL;
-		ygrad = (double***)malloc(sizeof(double)*MAT_3D_0_LEN);
-		for (int i = 0; i < MAT_3D_0_LEN; i++)
-		{
-			ygrad[i] = (double**)malloc(sizeof(double)*MAT_3D_1_LEN);
-			for (int k = 0; k < MAT_3D_1_LEN; k++)
-			{
-				ygrad[i][k] = (double*)malloc(sizeof(double)*MAT_3D_2_LEN);
-			}
-		}
-		//double zgrad[MAT_3D_0_LEN][MAT_3D_1_LEN][MAT_3D_2_LEN] = { 0 };
-		double ***zgrad = NULL;
-		zgrad = (double***)malloc(sizeof(double)*MAT_3D_0_LEN);
-		for (int i = 0; i < MAT_3D_0_LEN; i++)
-		{
-			zgrad[i] = (double**)malloc(sizeof(double)*MAT_3D_1_LEN);
-			for (int k = 0; k < MAT_3D_1_LEN; k++)
-			{
-				zgrad[i][k] = (double*)malloc(sizeof(double)*MAT_3D_2_LEN);
-			}
-		}
-
-		for (int i = 0; i < MAT_3D_0_LEN; i++)
-		{
-			for (int j = 0; j < MAT_3D_1_LEN; j++)
-			{
-				for (int k = 0; k < MAT_3D_2_LEN; k++)
-				{
-
-					if (i == 0)
-					{
-						xgrad[i][j][k] = -(H[i + 1][j][k] - H[i][j][k]);
-					}
-					else if (i == MAT_3D_0_LEN - 1)
-					{
-						xgrad[i][j][k] = -(H[i][j][k] - H[i - 1][j][k]);
-					}
-					else
-					{
-						xgrad[i][j][k] = -((H[i + 1][j][k] - H[i - 1][j][k]) / 2);
-					}//x·½Ïò
-					if (j == 0)
-					{
-						ygrad[i][j][k] = -(H[i][j + 1][k] - H[i][j][k]);
-					}
-					else if (j == MAT_3D_1_LEN - 1)
-					{
-						ygrad[i][j][k] = -(H[i][j][k] - H[i][j - 1][k]);
-					}
-					else
-					{
-						ygrad[i][j][k] = -((H[i][j + 1][k] - H[i][j - 1][k]) / 2);
-					}//y·½Ïò
-					if (k == 0)
-					{
-						zgrad[i][j][k] = -(H[i][j][k + 1] - H[i][j][k]);
-					}
-					else if (k == MAT_3D_1_LEN - 1)
-					{
-						zgrad[i][j][k] = -(H[i][j][k] - H[i][j][k - 1]);
-					}
-					else
-					{
-						zgrad[i][j][k] = -((H[i][j][k + 1] - H[i][j][k - 1]) / 2);
-					}//z·½Ïò
-
-				}
-			}
-		}//¼ÆËãÈý¸ö·½ÏòÉÏµÄÌÝ¶È¾ØÕó,ÓÉÓÚÑØÌÝ¶ÈÏÂ½µ£¬ËùÒÔÈ«È¡¸º
-		//double r[MAT_3D_0_LEN * MAT_3D_1_LEN * MAT_3D_2_LEN] = { 0 };
-		double *r = (double*)malloc(sizeof(double) * MAT_3D_0_LEN * MAT_3D_1_LEN * MAT_3D_2_LEN);
-		//double c[MAT_3D_0_LEN * MAT_3D_1_LEN * MAT_3D_2_LEN] = { 0 };
-		double *c = (double*)malloc(sizeof(double) * MAT_3D_0_LEN * MAT_3D_1_LEN * MAT_3D_2_LEN);
-		//double h[MAT_3D_0_LEN * MAT_3D_1_LEN * MAT_3D_2_LEN] = { 0 };
-		double *h = (double*)malloc(sizeof(double) * MAT_3D_0_LEN * MAT_3D_1_LEN * MAT_3D_2_LEN);
-		double rmax = MAT_3D_0_LEN;
-		double cmax = MAT_3D_1_LEN;
-		double hmax = MAT_3D_2_LEN;
-
-		r[0] = x2;
-		c[0] = y2;
-		h[0] = z2;
-		int iter = 0;
-		bool continflag = true;
-		while (continflag)
-		{
-			double dr, dc, dh, dv;
-			dr = getGrad(xgrad, r[iter], c[iter], h[iter]);
-			dc = getGrad(ygrad, r[iter], c[iter], h[iter]);
-			dh = getGrad(zgrad, r[iter], c[iter], h[iter]);
-			dv = sqrt(dr * dr + dc * dc + dh * dh);//±äÎªµ¥Î»ÏòÁ¿
-			dr = speed * dr / dv;
-			dc = speed * dc / dv;
-			dh = speed * dh / dv;
-			r[iter + 1] = r[iter] + dr;
-			c[iter + 1] = c[iter] + dc;
-			h[iter + 1] = h[iter] + dh;
-			if (r[iter + 1] < 0)
-			{
-				r[iter + 1] = 0;
-			}
-			if (c[iter + 1] < 0)
-			{
-				c[iter + 1] = 0;
-			}
-			if (h[iter + 1] < 0)
-			{
-				h[iter + 1] = 0;
-			}
-			if (r[iter + 1] > rmax - 1)
-			{
-				r[iter + 1] = rmax - 1;
-			}
-			if (c[iter + 1] > cmax - 1)
-			{
-				c[iter + 1] = cmax - 1;
-			}
-			if (h[iter + 1] > hmax - 1)
-			{
-				h[iter + 1] = hmax - 1;
-			}//±ÜÃâËÑË÷³¬³ö»­Ãæ
-			if (sqrt(pow((r[iter + 1] - x1), 2) + pow((c[iter + 1] - y1), 2) + pow((h[iter + 1] - z1), 2)) < 1)
-			{
-				r[iter + 1] = x1;
-				c[iter + 1] = y1;
-				h[iter + 1] = z1;
-				continflag = false;
-			}//ÀëÆðµã×ã¹»½ü¾ÍÍ£Ö¹£»                  
-			iter = iter + 1;
-		}//ÌÝ¶ÈÏÂ½µËÑË÷¹ý³Ì
-		//for (int i = iter; i >= 0; i--)
-		//{
-		//	printf("x×ø±êÎª£º%f  y×ø±êÎª£º%f  z×ø±êÎª£º%f\n", r[i], c[i], h[i]);
-		//}
-		int infr_Length = 20;
-		double infr[20] = { 0 };
-		double infc[20] = { 0 };
-		double infh[20] = { 0 };//¼ÇÂ¼¹ÕµãµÄÊý×é
-		infr[0] = r[iter];
-		infc[0] = c[iter];
-		infh[0] = h[iter];
-		int g = 0;//¼ÇÂ¼¹Õµã¸öÊý                                       
-		bool con = true;
-		bool ju = true;
-		//double test[MAT_3D_0_LEN][MAT_3D_1_LEN][MAT_3D_2_LEN] = { 0 };
-		while (con)
-		{
-			ju = true;
-			for (int i = 0; i <= iter; i++)
-			{
-				if (crossObstacle(r[i], c[i], h[i], r[iter], c[iter], h[iter], mat_3d, cons) && ju)
-				{
-					ju = false;
-					++g;
-					infr[g] = r[i];
-					infc[g] = c[i];
-					infh[g] = h[i];
-					iter = i;
-					if (i == 0)
-					{
-						con = false;
-					}
-
-				}
-
-			}
-		}//  ¼ÇÂ¼¹Õµã×ø±ê£»
-		double s[MAX_VERT] = { 0 };//¹À¼Æ¹ÕµãµÄÊý×é
-		for (int i = 1; i < infr_Length - 1; i++)
-		{
-			if (infr[i + 1] != 0 || infc[i + 1] != 0 || infh[i + 1] != 0)
-			{
-				double testx, testy, testz, minest;
-				if (infh[i + 1] > infh[i - 1])
-				{
-					testz = fabs(sqrt(pow((infr[i] - infr[i - 1]), 2) + pow((infc[i] - infc[i - 1]), 2)) / (sqrt(pow((infr[i] - infr[i - 1]), 2) + pow((infc[i] - infc[i - 1]), 2)) + sqrt(pow((infr[i + 1] - infr[i]), 2) + pow((infc[i + 1] - infc[i]), 2))) * fabs(infh[i + 1] - infh[i - 1]) + infh[i - 1] - infh[i]);
-				}
-				else
-				{
-					testz = fabs(infh[i - 1] - sqrt(pow((infr[i] - infr[i - 1]), 2) + pow((infc[i] - infc[i - 1]), 2)) / (sqrt(pow((infr[i] - infr[i - 1]), 2) + pow((infc[i] - infc[i - 1]), 2)) + sqrt(pow((infr[i + 1] - infr[i]), 2) + pow((infc[i + 1] - infc[i]), 2))) * fabs(infh[i + 1] - infh[i - 1]) - infh[i]);
-				}
-
-				testx = fabs((infc[i] - infc[i + 1]) / (infc[i - 1] - infc[i + 1]) * (infr[i - 1] - infr[i + 1]) + infr[i + 1] - infr[i]);
-				testy = fabs((infr[i] - infr[i + 1]) / (infr[i - 1] - infr[i + 1]) * (infc[i - 1] - infc[i + 1]) + infc[i + 1] - infc[i]);
-				minest = min(min(testx, testy), testz);
-				if (testz == minest)
-				{
-					for (int j = 0; j < MAX_VERT - 5; j++)
-					{
-						if (j % 6 == 0)
-						{
-							s[j] = sqrt(pow((infr[i] - vert[j]), 2) + pow((infc[i] - vert[j + 1]), 2));
-							s[j + 2] = sqrt(pow((infr[i] - vert[j + 2]), 2) + pow((infc[i] - vert[j + 3]), 2));
-						}
-					}
-					double mins = s[0];
-					int index = 0;
-					for (int k = 0; k < MAX_VERT; k++)
-					{
-						if (s[k] != 0)
-						{
-							if (s[k] == min(s[k], mins))
-							{
-								mins = s[k];
-								index = k;
-							}
-						}
-					}
-					infr[i] = vert[index];
-					infc[i] = vert[index + 1];
-				}//´ÓÅÔ±ßÈÆ¹ý
-				else
-				{
-
-				}//´ÓÉÏ·½ÈÆ¹ý
-			}//´¦Àí³ýÆðµãºÍÖÕµãÍâµÄÖÐ¼äµÄ¹Õµã
-
-		}//½«¹Õµã½øÐÐ´¦Àí£¬Ïû³ýÎó²î
-		double dist1[20] = { 0 };
-		int dist1_Length = 20;
-		for (int i = 0; i < infr_Length - 1; i++)
-		{
-			if (infr[i + 1] != 0 || infc[i + 1] != 0 || infh[i + 1] != 0)
-			{
-				dist1[i] = sqrt(pow((infr[i] - infr[i + 1]), 2) + pow((infc[i] - infc[i + 1]), 2) + pow((infh[i] - infh[i + 1]), 2));
-			}
-		}
-		for (int i = 0; i < dist1_Length; i++)
-		{
-			printf("dist1[%d]=%f\n", i, dist1[i]);
-		}
-		for (int i = 0; i < infr_Length; i++)
-		{
-			dist = dist + dist1[i];
-		}
-
-		for (int i = 0; i < 20; i++)
-		{
-			//printf("¹Õµã£ºx×ø±êÎª£º%f\ty×ø±êÎª£º%f\tz×ø±êÎª£º%f\n", infr[i], infc[i], infh[i]);
-		}
-		//printf("Á½µãÖ®¼äµÄ¾àÀëÎª%f\n", dist);
-		//system("pause");
-	}
-
-	return dist;
-}
-
-int main(int argc,char **argv)
-{
-	int rank,numprocs;
-	MPI_Init(&argc,&argv);
-	MPI_Comm_rank(MPI_COMM_WORLD,&rank);
-	MPI_Comm_size(MPI_COMM_WORLD,&numprocs);
-	int vert[MAX_VERT] = { 0 };
-	int para[MAX_PARA] = { 0 };
-	int vert_len = 0;
-	int para_len = 0;
-
-	if(rank==0){
-		int *** mat_3d = NULL;
-			char str[MAX_LEN] = { 0 };
-		FILE* sr;
-	
-		int c = 0;
-		mat_3d = (int***)malloc(sizeof(double)*MAT_3D_0_LEN);
-		for (int i = 0; i < MAT_3D_0_LEN; i++)
-		{
-			mat_3d[i] = (int**)malloc(sizeof(double)*MAT_3D_1_LEN);
-			for (int k = 0; k < MAT_3D_1_LEN; k++)
-			{
-				mat_3d[i][k] = (int*)malloc(sizeof(double)*MAT_3D_2_LEN);
-			}
-		}
-		//memset(mat_3d,1,sizeof(mat_3d));
-		sr = fopen("vert.txt", "r");
-		if (sr == NULL) {//Èô´ò¿ªÎÄ¼þÊ§°ÜÔòÍË³ö
-			puts("can not open file!");
-			return 0;
-		}
-
-		fgets(str, MAX_LEN, sr);
-	
-		while (!feof(sr)) {
-			fgets(str, MAX_LEN, sr);
-			char * token = strtok(str, " ");
-			while (token != NULL) {
-				vert[vert_len++] = atoi(token);
-				token = strtok(NULL, " ");
-			}
-		}
-		fclose(sr);
-		//¶ÁÈ¡´¹Ö±ÕÏ°­Ç½µÄ×ø±ê
-
-		sr = fopen("para.txt", "r");
-		if (sr == NULL) {//Èô´ò¿ªÎÄ¼þÊ§°ÜÔòÍË³ö
-			puts("can not open file!");
-			return 0;
-		}
-
-		fgets(str, MAX_LEN, sr);
-	
-		while (!feof(sr)) {
-			fgets(str, MAX_LEN, sr);
-			char * token = strtok(str, " ");
-			while (token != NULL) {
-				para[para_len++] = atoi(token);
-				token = strtok(NULL, " ");
-			}
-		}
-
-		fclose(sr);
-		double end,start;
-		//¶ÁÈ¡Æ½ÐÐÕÏ°­Ç½µÄ×ø±ê
-	
-		athread_init();
-		athread_set_num_threads(nums);
-		/*
-		__real_athread_spawn((void *)func,0);	
-		 */
-		start=MPI_Wtime();
-		for (int i = 0; i < vert_len - 5; i++)
-		{
-			if (i % 6 == 0)
-			{
-				int h;
-				h = vert[i + 5] - vert[i + 4] + 1;//Ç½µÄ¸ß¶È
-				if (vert[i + 1] == vert[i + 3])
-				{
-					if (vert[i] < vert[i + 2])
-					{
-						for (int j = vert[i + 4]; j < h; j++)
-						{
-							for (int k = vert[i]; k <= vert[i + 2]; k++)
-							{
-								mat_3d[k][vert[i + 1]][j] = 1;
-							}
-						}
-					}
-					else
-					{
-						for (int j = vert[i + 4]; j < h; j++)
-						{
-							for (int k = vert[i + 2]; k <= vert[i]; k++)
-							{
-								mat_3d[k][vert[i + 1]][j] = 1;
-							}
-						}
-					}
-				}//´¹Ö±ÓÚYÖáµÄÕÏ°­Ç½£¬ÒªÇóÈ·¶¨Ç½µÄÁ½µãµÄY£¬Z×ø±êÏàÍ¬
-				else if (vert[i] == vert[i + 2])
-				{
-					if (vert[i + 1] < vert[i + 3])
-					{
-						for (int j = vert[i + 4]; j < h; j++)
-						{
-							for (int k = vert[i + 1]; k <= vert[i + 3]; k++)
-							{
-								mat_3d[vert[i]][k][j] = 1;
-							}
-						}
-					}
-					else
-					{
-						for (int j = vert[i + 4]; j < h; j++)
-						{
-							for (int k = vert[i + 3]; k <= vert[i + 1]; k++)
-							{
-								mat_3d[vert[i]][k][j] = 1;
-							}
-						}
-					}
-				}//´¹Ö±ÓÚXÖáµÄÕÏ°­Ç½£¬ÒªÇóÈ·¶¨Ç½µÄÁ½µãµÄX£¬Z×ø±êÏàÍ¬
-				else
-				{
-					double a = (double)(vert[i + 1] - vert[i + 3]) / (vert[i] - vert[i + 2]);
-					double b = (double)(vert[i + 1] - a * vert[i]);
-					if (fabs(vert[i + 1] - vert[i + 3]) <= fabs(vert[i] - vert[i + 2]))
-					{
-						if (vert[i] < vert[i + 2])
-						{
-							for (int j = vert[i + 4]; j < h; j++)
-							{
-								for (int k = vert[i]; k <= vert[i + 2]; k++)
-								{
-									mat_3d[k][(int)(a * k + b + 0.5)][j] = 1;
-									mat_3d[k + 1][(int)(a * k + b + 0.5)][j] = 1;//·ÀÖ¹À©É¢´©ÕÏ°­Ç½
-
-								}
-							}
-						}
-						else
-						{
-							for (int j = vert[i + 4]; j < h; j++)
-							{
-								for (int k = vert[i + 2]; k <= vert[i]; k++)
-								{
-									mat_3d[k][(int)(a * k + b + 0.5)][j] = 1;
-									mat_3d[k + 1][(int)(a * k + b + 0.5)][j] = 1;//·ÀÖ¹À©É¢´©ÕÏ°­Ç½
-
-								}
-							}
-						}
-					}
-					else
-					{
-						if (vert[i + 1] < vert[i + 3])
-						{
-							for (int j = vert[i + 4]; j < h; j++)
-							{
-								for (int k = vert[i + 1]; k <= vert[i + 3]; k++)
-								{
-									mat_3d[(int)((k - b) / a + 0.5)][k][j] = 1;
-									mat_3d[(int)((k - b) / a + 0.5)][k + 1][j] = 1;//·ÀÖ¹À©É¢´©ÕÏ°­Ç½
-
-								}
-							}
-						}
-						else
-						{
-							for (int j = vert[i + 4]; j < h; j++)
-							{
-								for (int k = vert[i + 3]; k <= vert[i + 1]; k++)
-								{
-									mat_3d[(int)((k - b) / a + 0.5)][k][j] = 1;
-									mat_3d[(int)((k - b) / a + 0.5)][k + 1][j] = 1;//·ÀÖ¹À©É¢´©ÕÏ°­Ç½
-
-								}
-							}
-						}
-					}
-
-				}//Ð±µÄÕÏ°­Ç½£¬ÒªÇóZÏàÍ¬
-			}//ÕÏ°­ÎïËùÔÚ´¦ÉèÎª1  
-
-
-		}
-
-		for (int i = 0; i < para_len - 5; i++)
-		{
-			if (para[i] == para[i + 2])
-			{
-				if (para[i + 1] < para[i + 3])
-				{
-					for (int k = para[i] - para[i + 5] / 2; k <= para[i] + para[i + 5] / 2; k++)
-					{
-						for (int j = para[i + 1]; j <= para[i + 3]; j++)
-						{
-							mat_3d[k][j][para[i + 4]] = 1;
-						}
-					}
-				}
-				else
-				{
-					for (int k = para[i] - para[i + 5] / 2; k <= para[i] + para[i + 5] / 2; k++)
-					{
-						for (int j = para[i + 3]; j <= para[i + 1]; j++)
-						{
-							mat_3d[k][j][para[i + 4]] = 1;
-						}
-					}
-
-				}
-
-			}
-		}//Æ½ÐÐÓÚµØÃæµÄÕÏ°­Ç½ ÔÝÊ±ÒªÇóÁ½µãºá×ø±êÒ»ÖÂ
-
-	}	
-	for (int i = 0; i < MAT_3D_0_LEN; i++)
-	{
-		for (int j = 0; j < MAT_3D_1_LEN; j++)
-		{
-			for (int k = 0; k < MAT_3D_2_LEN; k++)
-			{
-				if (mat_3d[i][j][k] == 1)
-				{
-					mat_3d[i][j][k] = 0;
-					c++;
-				}
-				else
-				{
-
-					mat_3d[i][j][k] = 1;
-
-				}
-
-			}
-		}
-	}//Ê¹ÕÏ°­Îï´¦Îª0
-
-	double dist = findPath(10, 5, 5, 15, 80, 5, vert, mat_3d, c);
-	
-	printf("dist = %lf", dist);
-	end=MPI_Wtime();
-	printf("\ttime:%lf\n");
-
-	athread_halt();
-	MPI_Finalize();
-	//system("pause");
-	
-	return 0;
 }
