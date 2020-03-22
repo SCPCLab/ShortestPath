@@ -57,43 +57,30 @@ double findPath(int x1, int y1, int z1, int x2, int y2, int z2, int *vert, int c
 	double rat = 0.1;
 	double speed = 0.5;    
 	set_obstacle(x1,y1,z1,1);
-	double* buffer[2]={&local_mat_old[0][0][0],&local_mat_new[0][0][0]};
+	double* p1= &local_mat_old[0][0][0];
+	double* p2= &local_mat_new[0][0][0];
+	double* buffer[2]={p1,p2};
 	while(change<20){
 		icount=icount+1;
 		double* a0 = buffer[(icount-1) % 2]; 
 		double* a1 = buffer[icount%2]; 
-		for (int i = halo_size; i < local_size_x; i++)
-		{
-			for (int j = halo_size; j < local_size_y; j++)
-			{
-				for (int k = halo_size; k < local_size_z; k++)
-				{
-					a1[i][j][k] \
-					= a0[i][j][k] * (1 + rat) + (a0[i - 1][j][k] + a0[i + 1][j][k] +\
-					 a0[i][j - 1][k] +a0[i][j + 1][k] + a0[i][j][k - 1] + a0[i][j][k + 1]) * rat;
-					a1[i][j][k]=a1[i][j][k] * a0[i][j][k]; //mutiply the mat with obstacle
-					if (a1[i][j][k] > 1 && local_H[i][j][k] == 0) local_H[i][j][k] = icount;
-				}
-			}
-		}
 		for(int i=0;i<mat_1_len;i++){ 
 				MPI_Request request1,request2;
 				MPI_Status ierr1,ierr2;
 				if(rank<15){  
-						MPI_Irecv(&(a1[local_size_x+halo_size][i+halo_size][halo_size]),
+						MPI_Irecv(&(a0[local_size_x+halo_size][i+halo_size][halo_size]),
 						local_size_z,MPI_DOUBLE,rank+1,1,MPI_COMM_WORLD,&request1);
 				}   
 				if(rank>0){
-						MPI_Irecv(&(a1[0][i+halo_size][halo_size]),local_size_z,
+						MPI_Irecv(&(a0[0][i+halo_size][halo_size]),local_size_z,
 						MPI_DOUBLE,rank-1,0,MPI_COMM_WORLD,&request2);
 				}   
 				if(rank<15){                                  
-						MPI_Send(&(a1[local_size_x][i+halo_size][halo_size]),
+						MPI_Send(&(a0[local_size_x][i+halo_size][halo_size]),
 						local_size_z,MPI_DOUBLE,rank+1,0,MPI_COMM_WORLD);
 				}   
 				if(rank>0){
-						//ÏòÏÂ·¢
-						MPI_Send(&(a1[halo_size][i+halo_size][halo_size]),
+						MPI_Send(&(a0[halo_size][i+halo_size][halo_size]),
 						local_size_z,MPI_DOUBLE,rank-1,1,MPI_COMM_WORLD);
 				}    
 				if(rank<16-1){
@@ -105,12 +92,26 @@ double findPath(int x1, int y1, int z1, int x2, int y2, int z2, int *vert, int c
 			}    
 			MPI_Barrier(MPI_COMM_WORLD);
         }   
-		int local_nowpop=0;
-		for (int i = halo_size; i < local_size_x; i++)
+		for (int i = halo_size; i < local_size_x+halo_size; i++)
 		{
-			for (int j = halo_size; j < mat_1_len; j++)
+			for (int j = halo_size; j < local_size_y+halo_size; j++)
 			{
-				for (int k = halo_size; k < mat_2_len; k++)
+				for (int k = halo_size; k < local_size_z+halo_size; k++)
+				{
+					a1[i][j][k] \
+					= a0[i][j][k] * (1 + rat) + (a0[i - 1][j][k] + a0[i + 1][j][k] +\
+					 a0[i][j - 1][k] +a0[i][j + 1][k] + a0[i][j][k - 1] + a0[i][j][k + 1]) * rat;
+					a1[i][j][k]=a1[i][j][k] * a0[i][j][k]; //mutiply the mat with obstacle
+					if (a1[i][j][k] > 1 && local_H[i][j][k] == 0) local_H[i][j][k] = icount;
+				}
+			}
+		}
+		int local_nowpop=0;
+		for (int i = halo_size; i < local_size_x+halo_size; i++)
+		{
+			for (int j = halo_size; j < mat_1_len+halo_size; j++)
+			{
+				for (int k = halo_size; k < mat_2_len+halo_size; k++)
 				{
 					if (a1[i][j][k] > 1) local_nowpop = local_nowpop + 1;
 				}
