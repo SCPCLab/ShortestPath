@@ -21,8 +21,8 @@ extern "C" {
 #define mat_2_len 100
 #define halo_size 1
 
-double local_mat_old_old[local_size_x+2*halo_size][mat_1_len+2*halo_size][mat_2_len+2*halo_size]; 
-double local_mat_old_new[local_size_x+2*halo_size][mat_1_len+2*halo_size][mat_2_len+2*halo_size]; ;  //　watch out!both new and old are with halo!
+double local_mat_old[local_size_x+2*halo_size][mat_1_len+2*halo_size][mat_2_len+2*halo_size]; 
+double local_mat_new[local_size_x+2*halo_size][mat_1_len+2*halo_size][mat_2_len+2*halo_size]; ;  //　watch out!both new and old are with halo!
 double local_H[local_size_x+2*halo_size][mat_1_len+2*halo_size][mat_2_len+2*halo_size];
 double local_xgrad[local_size_x][mat_1_len][mat_2_len];
 double local_ygrad[local_size_x][mat_1_len][mat_2_len];
@@ -554,24 +554,28 @@ int main(int argc,char **argv)
 
 		}
 	}
-	for (int i = 0; i < mat_0_len; i++)
+	int local_c=0;
+	for (int i = halo_size; i < local_size_x; i++)
 	{
-		for (int j = 0; j < mat_1_len; j++)
+		for (int j = halo_size; j < mat_1_len+halo_size; j++)
 		{
-			for (int k = 0; k < mat_2_len; k++)
+			for (int k = halo_size; k < mat_2_len+halo_size; k++)
 			{
 				if (local_mat_old[i][j][k] == 1)
 				{
-					set_obstacle(i,j,k,0);
+					local_mat_old[i][j][k]=0;
 					c++;
 				}
 				else
 				{
-					set_obstacle(i,j,k,1);
+					local_mat_old[i][j][k]=1;
 				}
 			}
 		}
 	}
+	MPI_Barrier(MPI_COMM_WORLD);
+	int c=0;
+	MPI_AllReduce(&local_c,c,1,int,MPI_SUM,0,MPI_COMM_WORLD);
 
 	double dist = findPath(10, 5, 5, 15, 80, 5, vert, c);
 	if(myid==0){
