@@ -23,7 +23,7 @@ extern "C" {
 
 double local_mat_old_old[local_size_x+2*halo_size][mat_1_len+2*halo_size][mat_2_len+2*halo_size]; 
 double local_mat_old_new[local_size_x+2*halo_size][mat_1_len+2*halo_size][mat_2_len+2*halo_size]; ;  //　watch out!both new and old are with halo!
-double local_H[local_size_x][mat_1_len][mat_2_len];
+double local_H[local_size_x+2*halo_size][mat_1_len+2*halo_size][mat_2_len+2*halo_size];
 double local_xgrad[local_size_x][mat_1_len][mat_2_len];
 double local_ygrad[local_size_x][mat_1_len][mat_2_len];
 double local_zgrad[local_size_x][mat_1_len][mat_2_len];
@@ -163,30 +163,45 @@ double findPath(int x1, int y1, int z1, int x2, int y2, int z2, int *vert, int c
 			}
 		}
 	}
+
+	//更新H之间光晕
+	for(int i=0;i<mat_1_len;i++){ 
+		MPI_Request request1,request2;
+		MPI_Status ierr1,ierr2;
+		if(rank<15){  
+				MPI_Irecv(&(H[local_size_x+halo_size][i+halo_size][halo_size]),
+				local_size_z,MPI_DOUBLE,rank+1,1,MPI_COMM_WORLD,&request1);
+		}   
+		if(rank>0){
+				MPI_Irecv(&(H[0][i+halo_size][halo_size]),local_size_z,
+				MPI_DOUBLE,rank-1,0,MPI_COMM_WORLD,&request2);
+		}   
+		if(rank<15){                                  
+				MPI_Send(&(H[local_size_x][i+halo_size][halo_size]),
+				local_size_z,MPI_DOUBLE,rank+1,0,MPI_COMM_WORLD);
+		}   
+		if(rank>0){
+				//ÏòÏÂ·¢
+				MPI_Send(&(H[halo_size][i+halo_size][halo_size]),
+				local_size_z,MPI_DOUBLE,rank-1,1,MPI_COMM_WORLD);
+		}    
+		if(rank<16-1){
+				MPI_Wait(&request1,&ierr1);    
+		}   
+		if(rank>0){
+				MPI_Wait(&request2,&ierr2);    
+		}   
+	}    
+	MPI_Barrier(MPI_COMM_WORLD);
 	for (int i = 0; i < local_size_x; i++)
 	{
 		for (int j = 0; j < mat_1_len; j++)
 		{
 			for (int k = 0; k < mat_2_len; k++)
 			{
-				if (i == 0)
-					local_local_x_grad[i][j][k] = -(local_local_H[i + 1][j][k] - local_local_H[i][j][k]);
-				else if (i == mat_0_len - 1) 
-					local_x_grad[i][j][k] = -(local_H[i][j][k] - local_H[i - 1][j][k]);
-				else
-					local_x_grad[i][j][k] = -((local_H[i + 1][j][k] - local_H[i - 1][j][k]) / 2);       
-				if (j == 0) 
-					local_y_grad[i][j][k] = -(local_H[i][j + 1][k] - local_H[i][j][k]);
-				else if (j == mat_1_len - 1) 
-					local_y_grad[i][j][k] = -(local_H[i][j][k] - local_H[i][j - 1][k]);
-				else 
-					local_y_grad[i][j][k] = -((local_H[i][j + 1][k] - local_H[i][j - 1][k]) / 2);     
-				if (k == 0) 
-					local_z_grad[i][j][k] = -(local_H[i][j][k + 1] - local_H[i][j][k]);
-				else if (k == mat_1_len - 1) 
-					local_z_grad[i][j][k] = -(local_H[i][j][k] - local_H[i][j][k - 1]);
-				else 
-					local_z_grad[i][j][k] = -((local_H[i][j][k + 1] - local_H[i][j][k - 1]) / 2);    
+				local_x_grad[i][j][k] = -((local_H[i + 1+halo_size][j+halo_size][k+halo_size] - local_H[i - 1+halo_size][j+halo_size][k+halo_size]) / 2);       
+				local_y_grad[i][j][k] = -((local_H[i+halo_size][j + 1+halo_size][k+halo_size] - local_H[i+halo_size][j - 1+halo_size][k+halo_size]) / 2);     
+				local_z_grad[i][j][k] = -((local_H[i+halo_size][j+halo_size][k + 1+halo_size] - local_H[i+halo_size][j+halo_size][k - 1+halo_size]) / 2);    
 			}
 		}
 	}
