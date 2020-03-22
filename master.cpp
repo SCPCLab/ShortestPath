@@ -31,6 +31,7 @@ double ***local_H=NULL;
 double ***local_xgrad=NULL;
 double ***local_ygrad=NULL;
 double ***local_zgrad=NULL;
+
 int vert[MAX_VERT];
 int para[MAX_PARA];
 	
@@ -86,7 +87,7 @@ double findPath(int x1, int y1, int z1, int x2, int y2, int z2, int *vert, int c
 				}   
 		}    
 		MPI_Barrier(MPI_COMM_WORLD);
-       		   
+       		 
 		for (int i = halo_size; i < local_size_x+halo_size; i++)
 		{
 			for (int j = halo_size; j < local_size_y+halo_size; j++)
