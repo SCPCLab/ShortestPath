@@ -21,22 +21,24 @@ extern "C" {
 #define mat_2_len 100
 #define halo_size 1
 
-double local_mat_old_old[mat_0_len+2*halo_size][mat_1_len+2*halo_size][block_size+2*halo_size]; 
-double local_mat_old_new[mat_0_len][mat_1_len][block_size];
-double local_H[mat_0_len][mat_1_len][mat_2_len/numprocs];
-double local_xgrad[mat_0_len][mat_1_len][mat_2_len/numprocs];
-double local_ygrad[mat_0_len][mat_1_len][mat_2_len/numprocs];
-double local_zgrad[mat_0_len][mat_1_len][mat_2_len/numprocs];
-int block_size=mat_2_len/numprocs; //block_size without halo
+double local_mat_old_old[local_size_x+2*halo_size][mat_1_len+2*halo_size][mat_2_len+2*halo_size]; 
+double local_mat_old_new[local_size_x+2*halo_size][mat_1_len+2*halo_size][mat_2_len+2*halo_size]; ;  //　watch out!both new and old are with halo!
+double local_H[local_size_x][mat_1_len][mat_2_len];
+double local_xgrad[local_size_x][mat_1_len][mat_2_len];
+double local_ygrad[local_size_x][mat_1_len][mat_2_len];
+double local_zgrad[local_size_x][mat_1_len][mat_2_len];
+int local_size_x=mat_0_len/numprocs; //local_size without halo
+int local_size_y=mat_1_len;
+int local_size_z=mat_2_len; 
 int vert[MAX_VERT];
 int para[MAX_PARA];
 int vert_len ;
 int para_len ;
 
 int set_obstacle(int x,int y,int z,int target){ //the input is mat index,transform to local_mat index width halo and change it
-	int id=z/block_size;
+	int id=x/local_size_x;
 	if(rank==id)
-		local_mat_old[x][y][z%block_size+halo_size] = target;
+		local_mat_old[x%local_size_x+halo_size][y+halo_size][z+halo_size] = target;
 }
 double min(double x1, double x2) {  
 	if (x1 > x2) return x2;
@@ -55,34 +57,62 @@ double findPath(int x1, int y1, int z1, int x2, int y2, int z2, int *vert, int c
 	double rat = 0.1;
 	double speed = 0.5;    
 	set_obstacle(x1,y1,z1,1);
+	double* buffer[2]={&local_mat_old[0][0][0],&local_mat_new[0][0][0]};
 	while(change<20){
 		icount=icount+1;
-		/*
-			此处还应有进程间更新光晕没有写!!!!
-
-		*/
-		for (int i = halo_size; i < mat_0_len-halo_size; i++)
+		double* a0 = buffer[(icount-1) % 2]; 
+		double* a1 = buffer[icount%2]; 
+		for (int i = halo_size; i < local_size_x; i++)
 		{
-			for (int j = halo_size; j < mat_1_len-halo_size; j++)
+			for (int j = halo_size; j < local_size_y; j++)
 			{
-				for (int k = halo_size; k < mat_2_len/numprcos-halo_size; k++)
+				for (int k = halo_size; k < local_size_z; k++)
 				{
-					local_mat_new[i-halo_size][j-halo_size][k-halo_size] \
-					= local_mat_old[i][j][k] * (1 + rat) + (local_mat_old[i - 1][j][k] + local_mat_old[i + 1][j][k] + local_mat_old[i][j - 1][k] + local_mat_old[i][j + 1][k] + local_mat_old[i][j][k - 1] + local_mat_old[i][j][k + 1]) * rat;
-					local_mat__new=local_mat_new[i][j][k] * local_mat_old[i][j][k];
-					if (local_mat_new[i][j][k] > 1 && local_H[i][j][k] == 0) local_H[i][j][k] = icount;
+					a1[i][j][k] \
+					= a0[i][j][k] * (1 + rat) + (a0[i - 1][j][k] + a0[i + 1][j][k] +\
+					 a0[i][j - 1][k] +a0[i][j + 1][k] + a0[i][j][k - 1] + a0[i][j][k + 1]) * rat;
+					a1[i][j][k]=a1[i][j][k] * a0[i][j][k]; //mutiply the mat with obstacle
+					if (a1[i][j][k] > 1 && local_H[i][j][k] == 0) local_H[i][j][k] = icount;
 				}
 			}
 		}
-		MPI_Barrier(MPI_COMM_WORLD);
+		for(int i=0;i<mat_1_len;i++){ 
+				MPI_Request request1,request2;
+				MPI_Status ierr1,ierr2;
+				if(rank<15){  
+						MPI_Irecv(&(a1[local_size_x+halo_size][i+halo_size][halo_size]),
+						local_size_z,MPI_DOUBLE,rank+1,1,MPI_COMM_WORLD,&request1);
+				}   
+				if(rank>0){
+						MPI_Irecv(&(a1[0][i+halo_size][halo_size]),local_size_z,
+						MPI_DOUBLE,rank-1,0,MPI_COMM_WORLD,&request2);
+				}   
+				if(rank<15){                                  
+						MPI_Send(&(a1[local_size_x][i+halo_size][halo_size]),
+						local_size_z,MPI_DOUBLE,rank+1,0,MPI_COMM_WORLD);
+				}   
+				if(rank>0){
+						//ÏòÏÂ·¢
+						MPI_Send(&(a1[halo_size][i+halo_size][halo_size]),
+						local_size_z,MPI_DOUBLE,rank-1,1,MPI_COMM_WORLD);
+				}    
+				if(rank<16-1){
+						MPI_Wait(&request1,&ierr1);    
+				}   
+				if(rank>0){
+						MPI_Wait(&request2,&ierr2);    
+				}   
+			}    
+			MPI_Barrier(MPI_COMM_WORLD);
+        }   
 		int local_nowpop=0;
-		for (int i = 0; i < mat_0_len; i++)
+		for (int i = halo_size; i < local_size_x; i++)
 		{
-			for (int j = 0; j < mat_1_len; j++)
+			for (int j = halo_size; j < mat_1_len; j++)
 			{
-				for (int k = 0; k < mat_2_len/numprocs; k++)
+				for (int k = halo_size; k < mat_2_len; k++)
 				{
-					if (local_mat[i][j][k] > 1) local_nowpop = local_nowpop + 1;
+					if (a1[i][j][k] > 1) local_nowpop = local_nowpop + 1;
 				}
 			}
 		}            
@@ -94,9 +124,9 @@ double findPath(int x1, int y1, int z1, int x2, int y2, int z2, int *vert, int c
 		}
 	}
 
-	int id=z2/block_size;
+	int id=x2/local_size_x;
 	if(rank==id){
-		if(local_mat_old[x1][y2][z2%block_size+halo_size] == 0)
+		if(local_mat_old[x2%local_size_x+halo_size][y2+halo_size][z2+halo_size] == 0)
 			printf("cant spread to the end point \n");
 	}
 
@@ -133,14 +163,11 @@ double findPath(int x1, int y1, int z1, int x2, int y2, int z2, int *vert, int c
 			}
 		}
 	}
-	MPI_Scatter(&xgrad[0][0][0],mat_2_len*mat_1_len*mat_0_len,MPI_DOUBLE,&xgrad[0][0][0],mat_0_len*mat_1_len*block_size,MPI_DOUBLE,0,MPI_COMM_WORLD);
-	MPI_Scatter(&ygrad[0][0][0],mat_2_len*mat_1_len*mat_0_len,MPI_DOUBLE,&ygrad[0][0][0],mat_0_len*mat_1_len*block_size,MPI_DOUBLE,0,MPI_COMM_WORLD);
-	MPI_Scatter(&zgrad[0][0][0],mat_2_len*mat_1_len*mat_0_len,MPI_DOUBLE,&zgrad[0][0][0],mat_0_len*mat_1_len*block_size,MPI_DOUBLE,0,MPI_COMM_WORLD);
-	for (int i = 0; i < mat_0_len; i++)
+	for (int i = 0; i < local_size_x; i++)
 	{
 		for (int j = 0; j < mat_1_len; j++)
 		{
-			for (int k = 0; k < block_size; k++)
+			for (int k = 0; k < mat_2_len; k++)
 			{
 				if (i == 0)
 					local_local_x_grad[i][j][k] = -(local_local_H[i + 1][j][k] - local_local_H[i][j][k]);
@@ -164,9 +191,9 @@ double findPath(int x1, int y1, int z1, int x2, int y2, int z2, int *vert, int c
 		}
 	}
 	MPI_Barrier(MPI_COMM_WORLD);
-	MPI_Gather(&local_xgrad[0][0][0],mat_0_len*mat_1_len*block_size,MPI_DOUBLE,&xgrad[0][0][0],mat_0_len*mat_1_len*mat_2_len,MPI_DOUBLE,0,MPI_COMM_WORLD);
-	MPI_Gather(&local_ygrad[0][0][0],mat_0_len*mat_1_len*block_size,MPI_DOUBLE,&ygrad[0][0][0],mat_0_len*mat_1_len*mat_2_len,MPI_DOUBLE,0,MPI_COMM_WORLD);
-	MPI_Gather(&local_ygrad[0][0][0],mat_0_len*mat_1_len*block_size,MPI_DOUBLE,&ygrad[0][0][0],mat_0_len*mat_1_len*mat_2_len,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	MPI_Gather(&local_xgrad[0][0][0],local_size_x*mat_1_len*mat_2_len,MPI_DOUBLE,&xgrad[0][0][0],mat_0_len*mat_1_len*mat_2_len,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	MPI_Gather(&local_ygrad[0][0][0],local_size_x*mat_1_len*mat_2_len,MPI_DOUBLE,&ygrad[0][0][0],mat_0_len*mat_1_len*mat_2_len,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	MPI_Gather(&local_ygrad[0][0][0],local_size_x*mat_1_len*mat_2_len,MPI_DOUBLE,&ygrad[0][0][0],mat_0_len*mat_1_len*mat_2_len,MPI_DOUBLE,0,MPI_COMM_WORLD);
 	if(rank==0){
 		double *r = (double*)malloc(sizeof(double) * mat_0_len * mat_1_len * mat_2_len);
 		double *c = (double*)malloc(sizeof(double) * mat_0_len * mat_1_len * mat_2_len);
