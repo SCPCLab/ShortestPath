@@ -164,7 +164,7 @@ double findPath(int x1, int y1, int z1, int x2, int y2, int z2, int *vert, int c
 		}
 	}
 
-	//更新H之间光晕
+	//update the halo between local_H
 	for(int i=0;i<mat_1_len;i++){ 
 		MPI_Request request1,request2;
 		MPI_Status ierr1,ierr2;
