@@ -33,8 +33,6 @@ double ***local_ygrad=NULL;
 double ***local_zgrad=NULL;
 int vert[MAX_VERT];
 int para[MAX_PARA];
-int vert_len ;
-int para_len ;
 	
 int set_obstacle(int x,int y,int z,int target){ //the input is mat index,transform to local_mat index width halo and change it
 	int id=x/local_size_x;
@@ -388,6 +386,8 @@ int main(int argc,char **argv)
 			local_zgrad[i][j]=(double*)malloc(sizeof(double)*local_size_z);
 		}
 	}
+	int vert_len=0;
+	int para_len=0;
 	if(rank==0){
 		char str[MAX_LEN] = { 0 };
 		FILE* sr;
@@ -434,11 +434,13 @@ int main(int argc,char **argv)
 		athread_set_num_threads(nums);
 		__real_athread_spawn((void *)func,0);	
 		*/
-		MPI_Bcast(vert,vert_len,MPI_DOUBLE,0,MPI_COMM_WORLD);
-		MPI_Bcast(&vert_len,1,MPI_INT,0,MPI_COMM_WORLD);
-		MPI_Bcast(para,vert_len,MPI_DOUBLE,0,MPI_COMM_WORLD);
-		MPI_Bcast(&para_len,1,MPI_INT,0,MPI_COMM_WORLD);
 	}
+	MPI_Bcast(&para_len,1,MPI_INT,0,MPI_COMM_WORLD);
+	MPI_Bcast(&vert_len,1,MPI_INT,0,MPI_COMM_WORLD);
+
+	MPI_Bcast(vert,vert_len,MPI_INT,0,MPI_COMM_WORLD);
+	MPI_Bcast(para,para_len,MPI_INT,0,MPI_COMM_WORLD);
+	
 	for (int i = 0; i < vert_len - 5; i++)
 	{
 		if (i % 6 == 0)
@@ -598,9 +600,9 @@ int main(int argc,char **argv)
 		}
 	}
 	MPI_Reduce(&c,&c,1,MPI_INT,MPI_SUM,0,MPI_COMM_WORLD);
-	double dist = findPath(10, 5, 5, 15, 80, 5, vert, c);
+	//double dist = findPath(10, 5, 5, 15, 80, 5, vert, c);
 	if(rank==0){
-		printf("dist = %lf", dist);
+		//printf("dist = %lf", dist);
 		end=MPI_Wtime();
 		printf("\ttime:%lf\n");
 	}
