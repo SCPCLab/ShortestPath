@@ -67,7 +67,7 @@ double findPath(int x1, int y1, int z1, int x2, int y2, int z2, int *vert, int c
 		for(int i=0;i<mat_1_len;i++){ 
 				MPI_Request request1,request2;
 				MPI_Status ierr1,ierr2;
-				if(rank<15){  
+				if(rank<numprocs-1){  
 						MPI_Irecv(&(a0[local_size_x+halo_size][i+halo_size][halo_size]),
 						local_size_z,MPI_DOUBLE,rank+1,1,MPI_COMM_WORLD,&request1);
 				}   
@@ -75,7 +75,7 @@ double findPath(int x1, int y1, int z1, int x2, int y2, int z2, int *vert, int c
 						MPI_Irecv(&(a0[0][i+halo_size][halo_size]),local_size_z,
 						MPI_DOUBLE,rank-1,0,MPI_COMM_WORLD,&request2);
 				}   
-				if(rank<15){                                  
+				if(rank<numprocs-1){                                  
 						MPI_Send(&(a0[local_size_x][i+halo_size][halo_size]),
 						local_size_z,MPI_DOUBLE,rank+1,0,MPI_COMM_WORLD);
 				}   
@@ -83,7 +83,7 @@ double findPath(int x1, int y1, int z1, int x2, int y2, int z2, int *vert, int c
 						MPI_Send(&(a0[halo_size][i+halo_size][halo_size]),
 						local_size_z,MPI_DOUBLE,rank-1,1,MPI_COMM_WORLD);
 				}    
-				if(rank<16-1){
+				if(rank<numprocs-1){
 						MPI_Wait(&request1,&ierr1);    
 				}   
 				if(rank>0){
@@ -169,7 +169,7 @@ double findPath(int x1, int y1, int z1, int x2, int y2, int z2, int *vert, int c
 	for(int i=0;i<mat_1_len;i++){ 
 		MPI_Request request1,request2;
 		MPI_Status ierr1,ierr2;
-		if(rank<15){  
+		if(rank<numprocs-1){  
 				MPI_Irecv(&(H[local_size_x+halo_size][i+halo_size][halo_size]),
 				local_size_z,MPI_DOUBLE,rank+1,1,MPI_COMM_WORLD,&request1);
 		}   
@@ -177,7 +177,7 @@ double findPath(int x1, int y1, int z1, int x2, int y2, int z2, int *vert, int c
 				MPI_Irecv(&(H[0][i+halo_size][halo_size]),local_size_z,
 				MPI_DOUBLE,rank-1,0,MPI_COMM_WORLD,&request2);
 		}   
-		if(rank<15){                                  
+		if(rank<numprocs-1){                                  
 				MPI_Send(&(H[local_size_x][i+halo_size][halo_size]),
 				local_size_z,MPI_DOUBLE,rank+1,0,MPI_COMM_WORLD);
 		}   
@@ -186,7 +186,7 @@ double findPath(int x1, int y1, int z1, int x2, int y2, int z2, int *vert, int c
 				MPI_Send(&(H[halo_size][i+halo_size][halo_size]),
 				local_size_z,MPI_DOUBLE,rank-1,1,MPI_COMM_WORLD);
 		}    
-		if(rank<16-1){
+		if(rank<numprocs-1){
 				MPI_Wait(&request1,&ierr1);    
 		}   
 		if(rank>0){
